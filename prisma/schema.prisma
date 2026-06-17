@@ -1,0 +1,455 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── NextAuth Required Tables ──────────────────────────────────────────────────
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  isAdmin       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  memberships   Membership[]
+  apiKeys       ApiKey[]
+  auditLogs     AuditLog[]
+  assignedLeads Lead[]    @relation("AssignedLeads")
+}
+
+// ─── Organizations ────────────────────────────────────────────────────────────
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  logo        String?
+  plan        String   @default("free") // free | starter | pro | enterprise
+  status      String   @default("active") // active | suspended | deleted
+  settings    String   @default("{}") // JSON string
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships    Membership[]
+  subscriptions  Subscription[]
+  chatbots       Chatbot[]
+  leads          Lead[]
+  conversations  Conversation[]
+  knowledgeBases KnowledgeBase[]
+  apiKeys        ApiKey[]
+  auditLogs      AuditLog[]
+  usageTracking  UsageTracking[]
+  uploads        Upload[]
+}
+
+// ─── Memberships ──────────────────────────────────────────────────────────────
+
+model Membership {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           String       @default("member") // owner | admin | manager | member | viewer
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+// ─── Subscriptions ────────────────────────────────────────────────────────────
+
+model Subscription {
+  id                     String    @id @default(cuid())
+  organizationId         String    @unique
+  industryId             String?   // linked industry
+  plan                   String    @default("free")
+  status                 String    @default("active") // active | trialing | canceled | past_due | unpaid
+  stripeSubscriptionId   String?   @unique
+  stripeCustomerId       String?
+  stripePriceId          String?
+  stripeProductId        String?
+  currentPeriodStart     DateTime?
+  currentPeriodEnd       DateTime?
+  trialStart             DateTime?
+  trialEnd               DateTime?
+  canceledAt             DateTime?
+  cancelAtPeriodEnd      Boolean   @default(false)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ─── Chatbots ─────────────────────────────────────────────────────────────────
+
+model Chatbot {
+  id                 String   @id @default(cuid())
+  organizationId     String
+  name               String
+  description        String?
+  welcomeMessage     String   @default("Hi! How can I help you today?")
+  systemPrompt       String
+  themeColor         String   @default("#2563eb")
+  fontFamily         String   @default("Inter")
+  logoUrl            String?
+  widgetPosition     String   @default("bottom-right")
+  leadCaptureEnabled Boolean  @default(true)
+  knowledgeBaseId    String?
+  isActive           Boolean  @default(true)
+  isArchived         Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  knowledgeBase  KnowledgeBase? @relation(fields: [knowledgeBaseId], references: [id])
+  conversations  Conversation[]
+  leads          Lead[]
+  usageTracking  UsageTracking[]
+}
+
+// ─── Conversations ────────────────────────────────────────────────────────────
+
+model Conversation {
+  id             String   @id @default(cuid())
+  chatbotId      String
+  organizationId String
+  sessionId      String
+  visitorId      String?
+  pageUrl        String?
+  isArchived     Boolean  @default(false)
+  metadata       String   @default("{}") // JSON
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  chatbot      Chatbot      @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  lead         Lead?
+}
+
+// ─── Messages ─────────────────────────────────────────────────────────────────
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // user | assistant | system
+  content        String
+  tokensUsed     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+// ─── Leads ────────────────────────────────────────────────────────────────────
+
+model Lead {
+  id             String   @id @default(cuid())
+  organizationId String
+  chatbotId      String?
+  conversationId String?  @unique
+  assignedToId   String?
+  name           String?
+  email          String?
+  phone          String?
+  budget         String?
+  propertyType   String?
+  location       String?
+  timeline       String?
+  status         String   @default("new") // new | qualified | contacted | won | lost
+  source         String?
+  notes          String?
+  score          Int      @default(0)
+  metadata       String   @default("{}") // JSON
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chatbot      Chatbot?      @relation(fields: [chatbotId], references: [id])
+  conversation Conversation? @relation(fields: [conversationId], references: [id])
+  assignedTo   User?         @relation("AssignedLeads", fields: [assignedToId], references: [id])
+}
+
+// ─── Knowledge Bases ──────────────────────────────────────────────────────────
+
+model KnowledgeBase {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  documents    Document[]
+  chatbots     Chatbot[]
+}
+
+// ─── Documents ────────────────────────────────────────────────────────────────
+
+model Document {
+  id              String   @id @default(cuid())
+  knowledgeBaseId String
+  name            String
+  fileType        String
+  fileSize        Int
+  filePath        String
+  content         String?  // extracted text
+  status          String   @default("pending") // pending | processing | ready | error
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+}
+
+// ─── API Keys ─────────────────────────────────────────────────────────────────
+
+model ApiKey {
+  id             String    @id @default(cuid())
+  organizationId String
+  userId         String
+  name           String
+  keyHash        String    @unique
+  keyPrefix      String    // First 8 chars for display
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String?
+  userId         String?
+  action         String
+  resource       String
+  resourceId     String?
+  metadata       String   @default("{}") // JSON
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id])
+  user         User?         @relation(fields: [userId], references: [id])
+}
+
+// ─── Usage Tracking ───────────────────────────────────────────────────────────
+
+model UsageTracking {
+  id                String   @id @default(cuid())
+  organizationId    String
+  chatbotId         String?
+  month             String   // YYYY-MM
+  messageCount      Int      @default(0)
+  tokenCount        Int      @default(0)
+  conversationCount Int      @default(0)
+  leadCount         Int      @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chatbot      Chatbot?     @relation(fields: [chatbotId], references: [id])
+
+  @@unique([organizationId, chatbotId, month])
+}
+
+// ─── Uploads ──────────────────────────────────────────────────────────────────
+
+model Upload {
+  id             String   @id @default(cuid())
+  organizationId String
+  fileName       String
+  originalName   String
+  mimeType       String
+  fileSize       Int
+  filePath       String
+  url            String
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+}
+
+// ─── Industries ───────────────────────────────────────────────────────────────
+
+model Industry {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  slug           String   @unique
+  description    String?
+  icon           String?  // emoji or icon name
+  defaultPrompt  String
+  defaultColor   String   @default("#2563eb")
+  isActive       Boolean  @default(true)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  pricing  IndustryPricing[]
+  features IndustryFeature[]
+  prompts  IndustryPrompt[]
+  chatbots ChatbotIndustry[]
+}
+
+// ─── Industry Pricing ─────────────────────────────────────────────────────────
+
+model IndustryPricing {
+  id               String   @id @default(cuid())
+  industryId       String
+  plan             String   // free | starter | pro | enterprise
+  monthlyPrice     Int      @default(0) // in cents
+  yearlyPrice      Int      @default(0) // in cents
+  setupFee         Int      @default(0) // in cents
+  trialDays        Int      @default(0)
+  messageLimit     Int      @default(-1) // -1 = unlimited
+  chatbotLimit     Int      @default(-1) // -1 = unlimited
+  leadLimit        Int      @default(-1) // -1 = unlimited
+  storageLimit     Int      @default(1000) // MB
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  industry Industry @relation(fields: [industryId], references: [id], onDelete: Cascade)
+
+  @@unique([industryId, plan])
+}
+
+// ─── Industry Features ────────────────────────────────────────────────────────
+
+model IndustryFeature {
+  id          String   @id @default(cuid())
+  industryId  String
+  name        String
+  description String?
+  isEnabled   Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  industry Industry @relation(fields: [industryId], references: [id], onDelete: Cascade)
+}
+
+// ─── Industry Prompts ─────────────────────────────────────────────────────────
+
+model IndustryPrompt {
+  id          String   @id @default(cuid())
+  industryId  String
+  name        String   // e.g., "Lead Qualification", "Support", "Sales"
+  prompt      String
+  isDefault   Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  industry Industry @relation(fields: [industryId], references: [id], onDelete: Cascade)
+}
+
+// ─── Chatbot Industry ─────────────────────────────────────────────────────────
+
+model ChatbotIndustry {
+  id          String   @id @default(cuid())
+  chatbotId   String   @unique
+  industryId  String
+  customFields String  @default("{}") // JSON for industry-specific lead fields
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  industry Industry @relation(fields: [industryId], references: [id])
+}
+
+// ─── Payments ─────────────────────────────────────────────────────────────────
+
+model Payment {
+  id                  String   @id @default(cuid())
+  organizationId      String
+  stripePaymentId     String   @unique
+  stripeCustomerId    String?
+  stripeSubscriptionId String?
+  amount              Int      // in cents
+  currency            String   @default("usd")
+  status              String   // succeeded | pending | failed | refunded
+  paymentMethod       String?  // card | bank_transfer
+  description         String?
+  metadata            String   @default("{}") // JSON
+  receiptUrl          String?
+  invoiceUrl          String?
+  refundedAt          DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([stripeCustomerId])
+}
+
+// ─── Transactions ─────────────────────────────────────────────────────────────
+
+model Transaction {
+  id             String   @id @default(cuid())
+  organizationId String
+  type           String   // payment | refund | credit | debit
+  amount         Int      // in cents
+  currency       String   @default("usd")
+  description    String?
+  reference      String?  // external reference (Stripe payment ID, etc.)
+  status         String   @default("completed") // completed | pending | failed
+  metadata       String   @default("{}") // JSON
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
+}

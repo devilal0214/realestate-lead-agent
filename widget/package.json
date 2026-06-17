@@ -1,0 +1,15 @@
+{
+  "name": "realestate-ai-widget",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI Chat Widget SDK for RealEstate AI",
+  "main": "dist/widget.js",
+  "scripts": {
+    "build": "tsup src/index.ts --format iife --global-name AIWidget --outDir dist --minify --clean",
+    "dev": "tsup src/index.ts --format iife --global-name AIWidget --outDir dist --watch"
+  },
+  "devDependencies": {
+    "tsup": "^8.3.0",
+    "typescript": "^5.0.0"
+  }
+}

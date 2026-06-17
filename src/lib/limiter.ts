@@ -1,0 +1,20 @@
+// Simple in-memory rate limiter
+const store = new Map<string, { count: number; resetAt: number }>()
+
+export function rateLimit(key: string, limit: number, windowMs: number): { success: boolean; remaining: number } {
+  const now = Date.now()
+  const entry = store.get(key)
+  if (!entry || entry.resetAt < now) {
+    store.set(key, { count: 1, resetAt: now + windowMs })
+    return { success: true, remaining: limit - 1 }
+  }
+  if (entry.count >= limit) return { success: false, remaining: 0 }
+  entry.count++
+  return { success: true, remaining: limit - entry.count }
+}
+
+export const RATE_LIMITS = {
+  chat: { limit: 20, windowMs: 60_000 },
+  auth: { limit: 10, windowMs: 60_000 },
+  api: { limit: 100, windowMs: 60_000 },
+}
