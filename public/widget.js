@@ -9,7 +9,8 @@
       this.botId = config.botId;
       const currentScript = document.currentScript;
       const scriptUrl = currentScript ? currentScript.src : '';
-      this.apiUrl = config.apiUrl || new URL(scriptUrl).origin;
+      //this.apiUrl = config.apiUrl || new URL(scriptUrl).origin;
+      this.apiUrl = "https://bots.jaiveeru.site"
       this.sessionId = this._getOrCreateSessionId();
       this.visitorId = this._getOrCreateVisitorId();
       this.messages = [];
