@@ -7,7 +7,9 @@
   var RealEstateAIChatWidget = (function () {
     function Widget(config) {
       this.botId = config.botId;
-      this.apiUrl = config.apiUrl || window.location.origin;
+      const currentScript = document.currentScript;
+      const scriptUrl = currentScript ? currentScript.src : '';
+      this.apiUrl = config.apiUrl || new URL(scriptUrl).origin;
       this.sessionId = this._getOrCreateSessionId();
       this.visitorId = this._getOrCreateVisitorId();
       this.messages = [];
@@ -69,14 +71,14 @@
           msgs.forEach(function (m) { self._renderMessage(m); });
           this.messages = msgs;
         }
-      } catch (e) {}
+      } catch (e) { }
     };
 
     Widget.prototype._saveHistory = function () {
       try {
         var key = "aiw_history_" + this.botId + "_" + this.sessionId;
         localStorage.setItem(key, JSON.stringify(this.messages.slice(-50)));
-      } catch (e) {}
+      } catch (e) { }
     };
 
     Widget.prototype._injectStyles = function () {
