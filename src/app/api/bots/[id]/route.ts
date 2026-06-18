@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { corsHeaders } from "@/lib/cors";
 
 // Public endpoint - no auth required - used by embedded widget to fetch bot config
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,5 +24,5 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: 'Chatbot not found' }, { status: 404 })
   }
 
-  return NextResponse.json({ data: bot })
+  return NextResponse.json({ data: bot }, { headers: corsHeaders });
 }
